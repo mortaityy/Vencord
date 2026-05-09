@@ -1,262 +1,202 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2024 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { definePluginSettings } from "@api/Settings";
-import definePlugin, { OptionType } from "@utils/types";
 import { Devs } from "@utils/constants";
-import { React, ColorPicker } from "@webpack/common";
+import definePlugin, { OptionType } from "@utils/types";
+import { ColorPicker, Forms } from "@webpack/common";
 
+const STYLE_ID = "vc-smoothtype";
 
-const STYLE_ID = "smooth-typing-style";
-const CARET_ID = "smooth-typing-caret";
-
-let caretEl: HTMLDivElement | null = null;
-let selectionInterval: ReturnType<typeof setInterval> | null = null;
-
-const settings = definePluginSettings({
-    smoothCaret: {
-        type: OptionType.BOOLEAN,
-        description: "Enable smooth caret (cursor) animation",
-        default: true,
-        onChange() { applySettings(); }
-    },
-    smoothChars: {
-        type: OptionType.BOOLEAN,
-        description: "Enable smooth character fade-in while typing",
-        default: true,
-        onChange() { applySettings(); }
-    },
-    caretSpeed: {
-        type: OptionType.NUMBER,
-        description: "Caret transition speed (ms) — lower = faster",
-        default: 80,
-        onChange() { applySettings(); }
-    },
-    fadeSpeed: {
-        type: OptionType.NUMBER,
-        description: "Character fade-in speed (ms) — lower = faster",
-        default: 80,
-        onChange() { applySettings(); }
-    },
-    caretColor: {
-    type: OptionType.COMPONENT,
-    description: "Caret color",
-    default: 0xffffff,
-    component: () => (
-        <ColorPicker
-            color={settings.store.caretColor}
-            onChange={color => {
-                settings.store.caretColor = color;
-                applySettings();
-            }}
-            showEyeDropper={true}
-        />
-    )
-},
-    smoothScrollbar: {
-        type: OptionType.BOOLEAN,
-        description: "Enable smooth scrollbar in the text area",
-        default: true,
-        onChange() { applySettings(); }
-    },
-    scrollbarColor: {
-        type: OptionType.STRING,
-        description: "Scrollbar color",
-        default: "#3b3b3b",
-        onChange() { applySettings(); }
-    }
-});
-
-function getCaretColor() {
-    const color = settings.store.caretColor;
-    if (!color) return "var(--text-normal, #fff)";
-    return `#${color.toString(16).padStart(6, "0")}`;
+function onPickColor(color: number) {
+    settings.store.caretColor = color;
+    applyCSS();
 }
 
-function injectCSS() {
-    removeCSS();
-    const style = document.createElement("style");
-    style.id = STYLE_ID;
-    const { fadeSpeed, smoothScrollbar, scrollbarColor } = settings.store;
+const settings = definePluginSettings({
+    transitionDelay: {
+        type: OptionType.NUMBER,
+        description: "Transition Delay (ms)",
+        default: 60,
+        onChange: () => applyCSS(),
+    },
+    animationType: {
+        type: OptionType.SELECT,
+        description: "Animation Type",
+        options: [
+            { label: "Ease", value: "ease", default: true },
+            { label: "Linear", value: "linear" },
+            { label: "Ease-in", value: "ease-in" },
+            { label: "Ease-out", value: "ease-out" },
+            { label: "Ease-in-out", value: "ease-in-out" },
+        ],
+        onChange: () => applyCSS(),
+    },
+    caretColor: {
+        type: OptionType.COMPONENT,
+        description: "Caret color",
+        default: 0x00b0f4,
+        component: () => (
+            <div>
+                <Forms.FormTitle tag="h3">Caret Color</Forms.FormTitle>
+                <ColorPicker
+                    color={settings.store.caretColor}
+                    onChange={onPickColor}
+                    showEyeDropper={true}
+                />
+            </div>
+        ),
+    },
+});
 
-    style.textContent = `
-        /* Hide original caret */
-        [class*="slateTextArea"] * {
-            caret-color: transparent !important;
-        }
+function toHex(n: number) {
+    return `#${n.toString(16).padStart(6, "0")}`;
+}
 
-        /* Smooth char fade-in */
-        [class*="slateTextArea"] span[data-slate-string="true"] {
-            animation: smoothCharIn ${fadeSpeed}ms ease-out both;
-        }
+function buildCSS(): string {
+    const color = toHex(settings.store.caretColor ?? 0x00b0f4);
+    const ms = settings.store.transitionDelay ?? 60;
+    const easing = settings.store.animationType ?? "ease";
+    return `
+@keyframes vc-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+}
+#vc-smoothtype-caret.is-blinking {
+    animation: vc-blink 1s ease-in-out infinite;
+}
+#vc-smoothtype-caret {
+    position: fixed;
+    top: 0; left: 0;
+    width: 2px;
+    border-radius: 2px;
+    background: ${color};
+    pointer-events: none;
+    z-index: 99999;
+    display: none;
+    transition: left ${ms}ms ${easing}, top ${ms}ms ${easing}, height ${ms}ms ${easing};
+}
+[data-slate-editor] { caret-color: transparent !important; }
+`;
+}
 
-        @keyframes smoothCharIn {
-            from {
-                opacity: 0.6;
-                filter: blur(0.4px);
-            }
-            to {
-                opacity: 1;
-                filter: blur(0px);
-            }
-        }
+function getCaret(): HTMLDivElement {
+    let el = document.getElementById("vc-smoothtype-caret") as HTMLDivElement | null;
+    if (!el) {
+        el = document.createElement("div");
+        el.id = "vc-smoothtype-caret";
+        document.body.appendChild(el);
+    }
+    return el;
+}
 
-        /* Custom caret */
-        #${CARET_ID} {
-            position: fixed;
-            width: 2px;
-            border-radius: 2px;
-            background: ${getCaretColor()};
-            pointer-events: none;
-            z-index: 9999;
-            animation: caretBlink 1s step-end infinite;
-            transition: left var(--caret-speed, 80ms) cubic-bezier(0.2, 0, 0, 1),
-                        top var(--caret-speed, 80ms) cubic-bezier(0.2, 0, 0, 1),
-                        height var(--caret-speed, 80ms) ease,
-                        background 300ms ease;
-        }
+let blinkTimer: ReturnType<typeof setTimeout> | null = null;
 
-        @keyframes caretBlink {
-            0%, 100% { opacity: 1; }
-            50%       { opacity: 0; }
-        }
+function startBlink() { getCaret().classList.add("is-blinking"); }
 
-        ${smoothScrollbar ? `
-        /* Smooth Scrollbar */
-        [class*="slateTextArea"] {
-            overflow-y: auto;
-            scroll-behavior: smooth;
-            scrollbar-width: thin;
-            scrollbar-color: ${scrollbarColor} transparent;
-        }
+function stopBlink() {
+    getCaret().classList.remove("is-blinking");
+    if (blinkTimer) clearTimeout(blinkTimer);
+    blinkTimer = setTimeout(startBlink, 1000);
+}
 
-        [class*="slateTextArea"]::-webkit-scrollbar {
-            width: 4px;
-        }
+function applyCaretPosition() {
+    const el = getCaret();
+    if (!document.activeElement?.closest("[data-slate-editor]")) {
+        el.style.display = "none"; return;
+    }
+    const sel = window.getSelection();
+    if (!sel?.rangeCount) { el.style.display = "none"; return; }
+    const range = sel.getRangeAt(0).cloneRange();
+    range.collapse(false);
+    const rects = range.getClientRects();
+    let rect: DOMRect | null = rects.length > 0 ? rects[0] : null;
+    if (!rect || rect.height === 0) {
+        const node = range.startContainer;
+        const parent = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node) as HTMLElement | null;
+        if (parent) rect = parent.getBoundingClientRect();
+    }
+    if (!rect || rect.height === 0) { el.style.display = "none"; return; }
+    const newLeft = rect.right + "px";
+    const newTop = rect.top + "px";
+    if (el.style.left !== newLeft || el.style.top !== newTop) {
+        if (el.style.display !== "none") stopBlink();
+    }
+    el.style.display = "block";
+    el.style.left = newLeft;
+    el.style.top = rect.top + "px";
+    el.style.height = rect.height + "px";
+}
 
-        [class*="slateTextArea"]::-webkit-scrollbar-track {
-            background: transparent;
-        }
+let observer: MutationObserver | null = null;
 
-        [class*="slateTextArea"]::-webkit-scrollbar-thumb {
-            background: ${scrollbarColor};
-            border-radius: 4px;
-            transition: background 200ms ease;
-        }
+function startObserver() {
+    observer = new MutationObserver(() => applyCaretPosition());
+    observer.observe(document.body, { childList: true, subtree: true });
+}
 
-        [class*="slateTextArea"]::-webkit-scrollbar-thumb:hover {
-            background: ${scrollbarColor}cc;
-        }
-        ` : ""}
-    `;
-    document.head.appendChild(style);
+function stopObserver() {
+    observer?.disconnect();
+    observer = null;
+}
+
+const handlers = {
+    sel:   () => applyCaretPosition(),
+    focus: () => applyCaretPosition(),
+    blur:  () => { getCaret().style.display = "none"; },
+    key:   () => applyCaretPosition(),
+    click: () => applyCaretPosition(),
+};
+
+function startListeners() {
+    document.addEventListener("selectionchange", handlers.sel);
+    document.addEventListener("focusin", handlers.focus);
+    document.addEventListener("focusout", handlers.blur);
+    document.addEventListener("keyup", handlers.key, true);
+    document.addEventListener("click", handlers.click, true);
+}
+
+function stopListeners() {
+    document.removeEventListener("selectionchange", handlers.sel);
+    document.removeEventListener("focusin", handlers.focus);
+    document.removeEventListener("focusout", handlers.blur);
+    document.removeEventListener("keyup", handlers.key, true);
+    document.removeEventListener("click", handlers.click, true);
+}
+
+function applyCSS() {
+    document.getElementById(STYLE_ID)?.remove();
+    const s = document.createElement("style");
+    s.id = STYLE_ID;
+    s.textContent = buildCSS();
+    document.head.appendChild(s);
 }
 
 function removeCSS() {
     document.getElementById(STYLE_ID)?.remove();
 }
 
-function createCaret() {
-    removeCaret();
-    caretEl = document.createElement("div");
-    caretEl.id = CARET_ID;
-    document.body.appendChild(caretEl);
-}
-
-function removeCaret() {
-    document.getElementById(CARET_ID)?.remove();
-    caretEl = null;
-}
-
-function updateCaretPosition() {
-    if (!caretEl) return;
-
-    // Check that the focus is within the chat input
-    const focused = document.activeElement;
-    const isInChat = focused?.closest("[class*='slateTextArea']") || 
-                     focused?.closest("[class*='textArea']");
-    
-    if (!isInChat) {
-        caretEl.style.display = "none";
-        return;
-    }
-
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-
-    const range = sel.getRangeAt(0).cloneRange();
-    range.collapse(true);
-
-    const rect = range.getBoundingClientRect();
-    if (!rect || (rect.width === 0 && rect.height === 0)) return;
-
-    const node = sel.anchorNode;
-    if (!node) return;
-    const parent = node.parentElement?.closest("[class*='slateTextArea']");
-    if (!parent) {
-        caretEl.style.display = "none";
-        return;
-    }
-
-    caretEl.style.display = "block";
-    caretEl.style.left = `${rect.left}px`;
-    caretEl.style.top = `${rect.top}px`;
-    caretEl.style.height = `${rect.height || 20}px`;
-}   
-
-function startTracking() {
-    stopTracking();
-    selectionInterval = setInterval(updateCaretPosition, 16);
-    document.addEventListener("selectionchange", updateCaretPosition);
-    document.addEventListener("keydown", resetBlinkOnKey);
-}
-
-function stopTracking() {
-    if (selectionInterval) {
-        clearInterval(selectionInterval);
-        selectionInterval = null;
-    }
-    document.removeEventListener("selectionchange", updateCaretPosition);
-    document.removeEventListener("keydown", resetBlinkOnKey);
-}
-
-function resetBlinkOnKey() {
-    if (!caretEl) return;
-    caretEl.style.animation = "none";
-    void caretEl.offsetHeight;
-    caretEl.style.animation = "";
-}
-
-function applySettings() {
-    const { smoothCaret, caretSpeed } = settings.store;
-
-    document.documentElement.style.setProperty("--caret-speed", `${caretSpeed}ms`);
-
-    injectCSS();
-
-    if (smoothCaret) {
-        createCaret();
-        startTracking();
-    } else {
-        removeCaret();
-        stopTracking();
-    }
-}
-
-function cleanup() {
-    removeCSS();
-    removeCaret();
-    stopTracking();
-}
-
 export default definePlugin({
-    name: "SmoothTyping",
-    description: "Smooth caret movement, character animation, change color cursor typing.",
+    name: "SmoothType",
+    description: "The plugin allows you to fully customize the cursor caret's visual settings, including adjustable transition delays and custom CSS animation effects.",
     authors: [Devs.cute],
     settings,
 
     start() {
-        applySettings();
+        applyCSS();
+        getCaret();
+        startObserver();
+        startListeners();
     },
 
     stop() {
-        cleanup();
-    }
+        stopObserver();
+        stopListeners();
+        removeCSS();
+        if (blinkTimer) clearTimeout(blinkTimer);
+        document.getElementById("vc-smoothtype-caret")?.remove();
+    },
 });
