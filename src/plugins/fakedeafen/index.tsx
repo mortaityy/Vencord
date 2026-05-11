@@ -5,8 +5,11 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { openPluginModal } from "@components/settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
+import { ContextMenuApi, FluxDispatcher, Menu } from "@webpack/common";
+import type { MouseEvent } from "react";
 
 import { addSettingsPanelButton, DeafenIcon, removeSettingsPanelButton } from "@plugins/philsPluginLibrary";
 
@@ -33,7 +36,8 @@ const settings = definePluginSettings({
                     name: "faked",
                     icon: DeafenIcon,
                     tooltipText: "Fake Deafen",
-                    onClick: toggleFakeDeafen
+                    onClick: toggleFakeDeafen,
+                    onContextMenu: onFakeDeafenPanelContextMenu
                 });
             }
         }
@@ -104,6 +108,55 @@ const settings = definePluginSettings({
     }
 });
 
+function onFakeDeafenPanelContextMenu(e: MouseEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    ContextMenuApi.openContextMenu(e, () => <FakeDeafenQuickMenu />);
+}
+
+function FakeDeafenQuickMenu() {
+    const { cam, mute, deafen: deafenFake } = settings.use(["cam", "mute", "deafen"]);
+
+    return (
+        <Menu.Menu
+            navId="vc-fakedeafen-quick"
+            onClose={() => FluxDispatcher.dispatch({ type: "CONTEXT_MENU_CLOSE" })}
+            aria-label="Fake Deafen quick settings"
+        >
+            <Menu.MenuCheckboxItem
+                id="vc-fakedeafen-cam"
+                label="Camera"
+                checked={cam}
+                action={() => {
+                    settings.store.cam = !cam;
+                }}
+            />
+            <Menu.MenuCheckboxItem
+                id="vc-fakedeafen-mute"
+                label="Mute"
+                checked={mute}
+                action={() => {
+                    settings.store.mute = !mute;
+                }}
+            />
+            <Menu.MenuCheckboxItem
+                id="vc-fakedeafen-deafen"
+                label="Deafen"
+                checked={deafenFake}
+                action={() => {
+                    settings.store.deafen = !deafenFake;
+                }}
+            />
+            <Menu.MenuSeparator />
+            <Menu.MenuItem
+                id="vc-fakedeafen-show-more"
+                label="Show more..."
+                action={() => openPluginModal(FakeDeafenPlugin)}
+            />
+        </Menu.Menu>
+    );
+}
+
 function toggleFakeDeafen() {
     fakeD = !fakeD;
     console.log("[FakeDeafen] Toggle state:", fakeD ? "ON" : "OFF");
@@ -161,11 +214,11 @@ function setupKeybindListener() {
     document.addEventListener("keydown", keydownListener);
 }
 
-export default definePlugin({
+const FakeDeafenPlugin = definePlugin({
     name: "FakeDeafen",
     description: "You're deafened but you're not.",
     dependencies: ["PhilsPluginLibrary"],
-    authors: [Devs.desu],
+    authors: [Devs.desu,Devs.core],
 
     patches: [
         {
@@ -196,7 +249,8 @@ export default definePlugin({
                 name: "faked",
                 icon: DeafenIcon,
                 tooltipText: "Fake Deafen",
-                onClick: toggleFakeDeafen
+                onClick: toggleFakeDeafen,
+                onContextMenu: onFakeDeafenPanelContextMenu
             });
         }
 
@@ -214,3 +268,5 @@ export default definePlugin({
         }
     }
 });
+
+export default FakeDeafenPlugin;
