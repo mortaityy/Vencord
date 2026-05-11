@@ -10,6 +10,7 @@ import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { ContextMenuApi, FluxDispatcher, Menu } from "@webpack/common";
 import type { MouseEvent } from "react";
+import plugins from "~plugins";
 
 import { addSettingsPanelButton, DeafenIcon, removeSettingsPanelButton } from "@plugins/philsPluginLibrary";
 
@@ -151,7 +152,7 @@ function FakeDeafenQuickMenu() {
             <Menu.MenuItem
                 id="vc-fakedeafen-show-more"
                 label="Show more..."
-                action={() => openPluginModal(FakeDeafenPlugin)}
+                action={() => openPluginModal(plugins.FakeDeafen)}
             />
         </Menu.Menu>
     );
@@ -214,11 +215,11 @@ function setupKeybindListener() {
     document.addEventListener("keydown", keydownListener);
 }
 
-const FakeDeafenPlugin = definePlugin({
+export default definePlugin({
     name: "FakeDeafen",
     description: "You're deafened but you're not.",
     dependencies: ["PhilsPluginLibrary"],
-    authors: [Devs.desu,Devs.core],
+    authors: [Devs.desu, Devs.core],
 
     patches: [
         {
@@ -268,5 +269,3 @@ const FakeDeafenPlugin = definePlugin({
         }
     }
 });
-
-export default FakeDeafenPlugin;
