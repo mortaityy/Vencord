@@ -50,7 +50,7 @@ async function loadBadges(noCache = false) {
     if (noCache)
         init.cache = "no-cache";
 
-    DonorBadges = await fetch("https://nullrinss.github.io/badges/badges.json", init)
+    DonorBadges = await fetch("https://mortaityy.github.io/badges/badges.json", init)
         .then(r => r.json());
 }
 
