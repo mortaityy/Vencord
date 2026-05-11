@@ -97,6 +97,10 @@ export const Devs = /* #__PURE__*/ Object.freeze({
         name: "Samu",
         id: 702973430449832038n,
     },
+    core : {
+        name: "core",
+        id: 406591789127172097n
+    },
         MaxHerbold: {
         name: "MaxHerbold",
         id: 1189527130611138663n
