@@ -99,7 +99,8 @@ export const Devs = /* #__PURE__*/ Object.freeze({
     },
     core : {
         name: "core",
-        id: 406591789127172097n
+        id: 406591789127172097n,
+        badge: false
     },
         MaxHerbold: {
         name: "MaxHerbold",
