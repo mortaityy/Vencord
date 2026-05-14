@@ -39,12 +39,6 @@ import { patches } from "@webpack/patcher";
 
 import Plugins from "~plugins";
 export { Plugins as plugins };
-
-import { addAudioProcessor, removeAudioProcessor } from "./AudioPlayer";
-import { addChannelToolbarButton, addHeaderBarButton, removeChannelToolbarButton, removeHeaderBarButton } from "./HeaderBar";
-import { addProfileCollection, removeProfileCollection } from "./ProfileCollections";
-import { addUserAreaButton, removeUserAreaButton } from "./UserArea";
-
 const logger = new Logger("PluginManager", "#a6d189");
 
 export const PMLogger = logger;
@@ -84,7 +78,6 @@ export function hasAnyVisibleSettings({ settings }: Plugin) {
 export function addPatch(newPatch: Omit<Patch, "plugin">, pluginName: string, pluginPath = `Vencord.Plugins.plugins[${JSON.stringify(pluginName)}]`) {
     // TODO: this causes crashes
     if (pluginName === "Vesktop" && newPatch.find === ".STREAMING_AUTO_STREAMER_MODE,") return;
-    if (pluginName === "Equibop" && newPatch.find === ".STREAMING_AUTO_STREAMER_MODE,") return;
 
     const patch = newPatch as Patch;
     patch.plugin = pluginName;
@@ -173,7 +166,6 @@ export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof Flux
         logger.debug("Subscribing to flux events of plugin", p.name);
         for (const [event, handler] of Object.entries(p.flux)) {
             const wrappedHandler = p.flux[event] = function () {
-                if (p.name === "Encryptcord" && event === "MESSAGE_CREATE") return;
                 try {
                     const res = handler!.apply(p, arguments as any);
                     return res instanceof Promise
@@ -211,11 +203,10 @@ export function subscribeAllPluginsFluxEvents(fluxDispatcher: typeof FluxDispatc
 
 export const startPlugin = traceFunction("startPlugin", function startPlugin(p: Plugin) {
     const {
-        name, commands, contextMenus, managedStyle, userProfileBadges,
+        name, commands, contextMenus, managedStyle, userProfileBadge,
         onBeforeMessageEdit, onBeforeMessageSend, onMessageClick,
         chatBarButton, renderMemberListDecorator, renderMessageAccessory, renderMessageDecoration, messagePopoverButton,
-        // Custom
-        renderNicknameIcon, headerBarButton, audioProcessor, userAreaButton, renderProfileCollection
+        renderNicknameIcon
     } = p;
 
     if (p.start) {
@@ -259,7 +250,7 @@ export const startPlugin = traceFunction("startPlugin", function startPlugin(p: 
 
     if (managedStyle) enableStyle(managedStyle);
 
-    if (userProfileBadges) userProfileBadges.forEach(e => addProfileBadge(e));
+    if (userProfileBadge) addProfileBadge(userProfileBadge);
 
     if (onBeforeMessageEdit) addMessagePreEditListener(onBeforeMessageEdit);
     if (onBeforeMessageSend) addMessagePreSendListener(onBeforeMessageSend);
@@ -270,30 +261,17 @@ export const startPlugin = traceFunction("startPlugin", function startPlugin(p: 
     if (renderMessageDecoration) addMessageDecoration(name, renderMessageDecoration);
     if (renderMessageAccessory) addMessageAccessory(name, renderMessageAccessory);
     if (messagePopoverButton) addMessagePopoverButton(name, messagePopoverButton.render, messagePopoverButton.icon);
-
-    // Custom
     if (renderNicknameIcon) addNicknameIcon(name, renderNicknameIcon);
-    if (headerBarButton) {
-        if (headerBarButton.location === "channeltoolbar") {
-            addChannelToolbarButton(name, headerBarButton.render, headerBarButton.priority);
-        } else {
-            addHeaderBarButton(name, headerBarButton.render, headerBarButton.priority);
-        }
-    }
-    if (audioProcessor) addAudioProcessor(name, audioProcessor);
-    if (userAreaButton) addUserAreaButton(name, userAreaButton.render, userAreaButton.priority);
-    if (renderProfileCollection) addProfileCollection(name, renderProfileCollection);
 
     return true;
 }, p => `startPlugin ${p.name}`);
 
 export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plugin) {
     const {
-        name, commands, contextMenus, managedStyle, userProfileBadges,
+        name, commands, contextMenus, managedStyle, userProfileBadge,
         onBeforeMessageEdit, onBeforeMessageSend, onMessageClick,
         chatBarButton, renderMemberListDecorator, renderMessageAccessory, renderMessageDecoration, messagePopoverButton,
-        // Custom
-        renderNicknameIcon, headerBarButton, audioProcessor, userAreaButton, renderProfileCollection
+        renderNicknameIcon
     } = p;
 
     if (p.stop) {
@@ -335,7 +313,7 @@ export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plu
 
     if (managedStyle) disableStyle(managedStyle);
 
-    if (userProfileBadges) userProfileBadges.forEach(e => removeProfileBadge(e));
+    if (userProfileBadge) removeProfileBadge(userProfileBadge);
 
     if (onBeforeMessageEdit) removeMessagePreEditListener(onBeforeMessageEdit);
     if (onBeforeMessageSend) removeMessagePreSendListener(onBeforeMessageSend);
@@ -346,19 +324,7 @@ export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plu
     if (renderMessageDecoration) removeMessageDecoration(name);
     if (renderMessageAccessory) removeMessageAccessory(name);
     if (messagePopoverButton) removeMessagePopoverButton(name);
-
-    // Custom
     if (renderNicknameIcon) removeNicknameIcon(name);
-    if (headerBarButton) {
-        if (headerBarButton.location === "channeltoolbar") {
-            removeChannelToolbarButton(name);
-        } else {
-            removeHeaderBarButton(name);
-        }
-    }
-    if (audioProcessor) removeAudioProcessor(name);
-    if (userAreaButton) removeUserAreaButton(name);
-    if (renderProfileCollection) removeProfileCollection(name);
 
     return true;
 }, p => `stopPlugin ${p.name}`);
@@ -370,16 +336,11 @@ export const initPluginManager = onlyOnce(function init() {
     const pluginKeysToBind: Array<keyof PluginDef & `${"on" | "render"}${string}`> = [
         "onBeforeMessageEdit", "onBeforeMessageSend", "onMessageClick",
         "renderMemberListDecorator", "renderMessageAccessory", "renderMessageDecoration",
-        // Custom
-        "renderNicknameIcon", "renderProfileCollection"
+        "renderNicknameIcon"
     ];
 
     const neededApiPlugins = new Set<string>();
 
-    // First round-trip to mark and force enable dependencies
-    //
-    // FIXME: might need to revisit this if there's ever nested (dependencies of dependencies) dependencies since this only
-    // goes for the top level and their children, but for now this works okay with the current API plugins
     for (const p of pluginsValues) if (isPluginEnabled(p.name)) {
         p.dependencies?.forEach(d => {
             const dep = Plugins[d];
@@ -407,13 +368,7 @@ export const initPluginManager = onlyOnce(function init() {
         if (p.renderMessageDecoration) neededApiPlugins.add("MessageDecorationsAPI");
         if (p.messagePopoverButton) neededApiPlugins.add("MessagePopoverAPI");
         if (p.userProfileBadge) neededApiPlugins.add("BadgeAPI");
-
-        // Custom
         if (p.renderNicknameIcon) neededApiPlugins.add("NicknameIconsAPI");
-        if (p.headerBarButton) neededApiPlugins.add("HeaderBarAPI");
-        if (p.audioProcessor) neededApiPlugins.add("AudioPlayerAPI");
-        if (p.userAreaButton) neededApiPlugins.add("UserAreaAPI");
-        if (p.renderProfileCollection) neededApiPlugins.add("ProfileCollectionsAPI");
 
         for (const key of pluginKeysToBind) {
             p[key] &&= p[key].bind(p) as any;
@@ -427,11 +382,22 @@ export const initPluginManager = onlyOnce(function init() {
 
     for (const p of pluginsValues) {
         if (p.settings) {
-            p.settings.pluginName = p.name;
+            p.options ??= {};
 
-            for (const [key, def] of Object.entries(p.settings.def)) {
-                if (def.onChange)
-                    SettingsStore.addChangeListener(`plugins.${p.name}.${key}`, def.onChange);
+            p.settings.pluginName = p.name;
+            for (const name in p.settings.def) {
+                const def = p.settings.def[name];
+                const checks = p.settings.checks?.[name];
+                p.options[name] = { ...def, ...checks };
+            }
+        }
+
+        if (p.options) {
+            for (const name in p.options) {
+                const opt = p.options[name];
+                if (opt.onChange != null) {
+                    SettingsStore.addChangeListener(`plugins.${p.name}.${name}`, opt.onChange);
+                }
             }
         }
 
