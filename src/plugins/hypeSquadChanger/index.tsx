@@ -7,7 +7,7 @@
 import definePlugin from "@utils/types";
 import { definePluginSettings } from "@api/Settings";
 import { findByProps } from "@webpack";
-import { Button, Forms, Toasts } from "@webpack/common";
+import { Button, Forms, showToast } from "@webpack/common";
 import { Devs } from "@utils/constants";
 
 const House = {
@@ -192,7 +192,7 @@ function createModal() {
         btn.onclick = async () => {
             const tok = getCurrentToken();
             if (!tok) {
-                Toasts.show({ id: Toasts.genId(), message: "Could not detect token automatically.", type: Toasts.Type.FAILURE });
+                showToast({ text: "Could not detect token automatically.", variant: "critical" });
                 return;
             }
             await switchHouseWithToken(h.id, tok);
@@ -254,13 +254,9 @@ async function switchHouseWithToken(houseId: number, token: string) {
             });
         }
         const ok = res.status === 204 || res.ok;
-        Toasts.show({
-            id: Toasts.genId(),
-            message: ok ? `Switched to Hypesquad ${names[houseId]}` : `Failed (${res.status})`,
-            type: ok ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE
-        });
+        showToast({ text: ok ? `Switched to Hypesquad ${names[houseId]}` : `Failed (${res.status})`, variant: ok ? "success" : "critical" });
     } catch (e: any) {
-        Toasts.show({ id: Toasts.genId(), message: `Error: ${e?.message ?? "Unknown"}`, type: Toasts.Type.FAILURE });
+        showToast({ text: `Error: ${e?.message ?? "Unknown"}`, variant: "critical" });
     }
 }
 

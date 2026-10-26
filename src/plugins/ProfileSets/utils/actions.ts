@@ -7,7 +7,7 @@
 import { isNonNullish } from "@utils/guards";
 import { ProfilePreset } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
-import { showToast, Toasts } from "@webpack/common";
+import { showToast } from "@webpack/common";
 
 import { getCurrentProfile } from "@plugins/ProfileSets/utils/profile";
 import { addPreset, movePresetInArray, presets, PresetSection, type ProfilePresetEx, removePreset, replaceAllPresets, savePresetsData, updatePreset } from "@plugins/ProfileSets/utils/storage";
@@ -142,7 +142,7 @@ export async function importPresets(
             await savePresetsData(section);
             forceUpdate();
         } catch {
-            showToast("Failed to import presets. The file might be invalid.", Toasts.Type.FAILURE);
+            showToast({ text: "Failed to import presets. The file might be invalid.", variant: "critical" });
         }
     };
     input.click();
